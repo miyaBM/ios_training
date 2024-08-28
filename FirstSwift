@@ -1,0 +1,114 @@
+//
+//  ViewController.swift
+//  JobTraining
+//
+//  Created by Kouhei Miyauchi on 2024/08/28.
+//
+
+import UIKit
+
+struct TestStruct {
+    var token:String
+    var status:Status
+}
+enum Status {
+    case wait
+    case now
+    case onFinishButFailure
+    case onFinishButSuccess
+}
+
+
+class ViewController: UIViewController {
+    var tokenList:[TestStruct] = []
+    let dispatchGroup = DispatchGroup()
+    // 直列キュー / 指定なし
+    let dispatchQueue = DispatchQueue(label: "queue")
+    private var isRunning = false
+    var workItem :DispatchWorkItem?
+    
+    func stopGetImage(){
+        workItem?.cancel()
+    }
+    
+    func getImage(target: TestStruct){
+        let now = self.tokenList.firstIndex(where: {$0.token == target.token})
+        guard let now = now else {
+            print("token is no index")
+            return
+        }
+        print("token \(now)")
+        self.tokenList[now].status = .now
+        //
+        sleep(UInt32.random(in: 0...2))
+        //
+        self.tokenList[now].status = .onFinishButSuccess
+    }
+    
+    
+    func doMultiAsyncProcess() {
+        let targetList = self.tokenList.filter({
+            $0.status != .onFinishButSuccess
+        })
+        if targetList.isEmpty {
+           return
+        }
+
+        isRunning = true
+        workItem = DispatchWorkItem {
+            for (index, value) in self.tokenList.enumerated() {
+                print("looping \(index)")
+                
+                if (self.workItem?.isCancelled)! {
+                    break
+                }
+                
+                self.isRunning = true
+                self.getImage(target: value)
+            }
+        }
+        guard let workItem = workItem else {
+            print("workitem is nil")
+            return
+        }
+        dispatchQueue.async(execute: workItem)
+        workItem.wait()
+        print("workitem is finish")
+        isRunning = false
+        
+        workItem.notify(queue: dispatchQueue){
+            print("workitem.notify is called")
+            let targetList2 = self.tokenList.filter({
+                $0.status != .onFinishButSuccess
+            })
+            if !targetList2.isEmpty {
+                self.doMultiAsyncProcess()
+            }
+        }
+        
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        NSLog("Debug viewDidLoad")
+
+        for i in 0...6 {
+            let test = TestStruct(
+                token: "test\(i)", status: .wait
+            )
+            tokenList.append(test)
+        }
+        doMultiAsyncProcess()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        NSLog("Debug viewWillAppear")
+    }
+    override func viewDidAppear(_ animated: Bool) {
+        NSLog("Debug viewDidAppear")
+    }
+    override func viewDidDisappear(_ animated: Bool) {
+        NSLog("Debug viewDidDisappear")
+    }
+}
+
